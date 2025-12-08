@@ -1,12 +1,15 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { getUserDataWithUserId, getUserDataWithUsername } from "../../api/main";
 import { setCookie, getCookie } from "../../utils/cookies";
+import LeaugePicker from "../components/LeaugePicker";
 
 function HomePage() {
     const [userData, setUserData] = useState<any | null>(null);
     const [username, setUsername] = useState("");
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const navigate = useNavigate();
 
     useEffect(() => {
         const id = getCookie('userId');
@@ -60,7 +63,11 @@ function HomePage() {
                     <button type="submit">Lookup and Save</button>
                 </form>
             ) : (
-                <pre>{JSON.stringify(userData, null, 2)}</pre>
+                <div>
+                    <pre>{JSON.stringify(userData, null, 2)}</pre>
+                    <h2>Your Leagues</h2>
+                    <LeaugePicker onSelect={(league) => navigate(`/league/${league.league_id}`)} />
+                </div>
             )}
         </div>
     );
