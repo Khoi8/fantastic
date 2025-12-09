@@ -68,7 +68,11 @@ const LeaguePage: React.FC = () => {
                 {r.name ?? `Roster ${r.roster_id}`}
               </div>
               <div style={{ fontSize: 12, color: "#666", marginBottom: 12 }}>Owner: {r.ownerDisplay}</div>
-              <RosterView roster={r} allRosters={rosters} scoringSettings={league.scoring_settings} />
+              <RosterView
+                roster={r}
+                allRosters={rosters}
+                scoringSettings={league.scoring_settings}
+              />
             </div>
           ))}
         </div>

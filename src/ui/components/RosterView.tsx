@@ -5,6 +5,7 @@ import { calculateZScores } from '../../utils/zScoreCalculator';
 import { getCachedPlayerInjuries, getPlayerInjuryDetails } from '../../utils/injuryCache';
 import { getCachedRecentStats } from '../../utils/recentStatsCache';
 import { calculateTrends, getTrendColor, getTrendEmoji, formatTrendStatus } from '../../utils/trendAnalysis';
+import { ZScoreRadar } from './ZScoreRadar';
 
 // Map stat abbreviations to full English names
 const STAT_NAMES: { [key: string]: string } = {
@@ -285,9 +286,8 @@ const RosterView: React.FC<RosterViewProps> = ({ roster, allRosters, scoringSett
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 4, marginBottom: 8 }}>
               {Object.entries(playerZScores[playerId].scores).map(([cat, score]: [string, any]) => {
                 const scoreNum = typeof score === 'number' ? score : 0;
-                const catColor = getCategoryColor(scoreNum);
-                const catName = STAT_NAMES[cat] || cat; // Use full name, fallback to abbreviation
-                const scoreColor = scoreNum > 0 ? '#4caf50' : scoreNum < 0 ? '#f44336' : '#999999'; // Green for positive, red for negative, gray for zero
+                const catName = STAT_NAMES[cat] || cat;
+                const scoreColor = Math.abs(scoreNum) < 1 ? '#999999' : scoreNum > 0 ? '#4caf50' : '#f44336';
                 return (
                   <div key={cat} style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 4px' }}>
                     <span style={{ fontWeight: 500 }}>{catName}:</span>
@@ -295,6 +295,10 @@ const RosterView: React.FC<RosterViewProps> = ({ roster, allRosters, scoringSett
                   </div>
                 );
               })}
+            </div>
+
+            <div style={{ marginBottom: 8 }}>
+              <ZScoreRadar playerA={playerZScores[playerId]} height={220} />
             </div>
 
             {playerTrends[playerId] && (
@@ -355,18 +359,24 @@ const RosterView: React.FC<RosterViewProps> = ({ roster, allRosters, scoringSett
   const calculateRosterTotals = (playerIds: string[]) => {
     const totals: { [key: string]: number } = {};
     let totalZ = 0;
+    let praTotal = 0;
 
     playerIds.forEach((playerId) => {
       const playerData = playerZScores[playerId];
       if (!playerData) return;
 
       totalZ += playerData.totalZ;
+      const playerPra =
+        typeof playerData.praZ === 'number'
+          ? playerData.praZ
+          : (playerData.scores.pts ?? 0) + (playerData.scores.reb ?? 0) + (playerData.scores.ast ?? 0);
+      praTotal += playerPra;
       Object.entries(playerData.scores).forEach(([cat, score]: [string, any]) => {
         totals[cat] = (totals[cat] || 0) + (typeof score === 'number' ? score : 0);
       });
     });
 
-    return { totalZ, categoryTotals: totals };
+    return { totalZ, categoryTotals: totals, praTotal };
   };
 
   return (
@@ -377,6 +387,7 @@ const RosterView: React.FC<RosterViewProps> = ({ roster, allRosters, scoringSett
           {(() => {
             const allPlayerIds = [...(roster.starters ?? [])]; // Only starters, exclude bench
             const totals = calculateRosterTotals(allPlayerIds);
+            const praColor = Math.abs(totals.praTotal) < 1 ? '#666666' : totals.praTotal > 0 ? '#4caf50' : '#f44336';
             return (
               <>
                 <div style={{ fontWeight: 700, marginBottom: 6, fontSize: 12, color: '#333' }}>
@@ -393,6 +404,19 @@ const RosterView: React.FC<RosterViewProps> = ({ roster, allRosters, scoringSett
                       </div>
                     );
                   })}
+                </div>
+                <div
+                  style={{
+                    marginTop: 8,
+                    paddingTop: 6,
+                    borderTop: '1px solid #dcdcdc',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                  }}
+                >
+                  <span style={{ fontWeight: 600, color: '#333' }}>Starters PRA Z-Score:</span>
+                  <span style={{ color: praColor, fontWeight: 700 }}>{totals.praTotal.toFixed(2)}</span>
                 </div>
               </>
             );
@@ -447,6 +471,7 @@ const RosterView: React.FC<RosterViewProps> = ({ roster, allRosters, scoringSett
           </div>
         </>
       )}
+
     </div>
   );
 };

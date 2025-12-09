@@ -197,6 +197,13 @@ export const calculateZScores = (
     });
 
     playerEntry.totalZ = parseFloat(totalZ.toFixed(2));
+
+    const praZ =
+      (playerEntry.scores.pts ?? 0) +
+      (playerEntry.scores.reb ?? 0) +
+      (playerEntry.scores.ast ?? 0);
+    playerEntry.praZ = parseFloat(praZ.toFixed(2));
+
     result[id] = playerEntry;
   });
 

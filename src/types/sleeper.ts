@@ -257,6 +257,7 @@ export interface PlayerZScore {
     [category: string]: number; 
   };
   totalZ: number;            // Sum of all weighted Z-scores
+  praZ?: number;             // Points + Rebounds + Assists composite Z-score
 }
 
 /**
