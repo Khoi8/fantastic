@@ -30,7 +30,8 @@ const IMPACT_STATS = ['calculated_fg', 'calculated_ft', 'calculated_3pt'];
 
 const IGNORED_KEYS = [
   'bonus_ast_15p', 'bonus_pt_40p', 'bonus_pt_50p', 
-  'bonus_reb_20p', 'qd'
+  'bonus_reb_20p', 'dd', 'td', 'qd',
+  'tf', 'ff'
 ];
 
 /**
@@ -135,9 +136,17 @@ export const calculateZScores = (
     if (!pStats || !pStats.gp) return;
 
     const name = (pStats as any).player_name || 'Unknown Player';
+    const gp = Number(pStats.gp);
+
+    // Determine confidence based on games played
+    let dataConfidence: 'HIGH' | 'MEDIUM' | 'LOW_SAMPLE' = 'HIGH';
+    if (gp < 5) dataConfidence = 'LOW_SAMPLE';
+    else if (gp < 15) dataConfidence = 'MEDIUM';
 
     const playerEntry: PlayerZScore = {
       name,
+      confidence: dataConfidence,
+      gp: gp,
       scores: {},
       totalZ: 0
     };

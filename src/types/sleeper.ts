@@ -181,6 +181,17 @@ export interface Roster {
   [key: string]: any;
 }
 
+export interface SleeperPlayerInfo {
+  player_id: string;
+  first_name: string;
+  last_name: string;
+  injury_status: string | null; // "Out", "Questionable", "Day-to-Day", etc.
+  injury_body_part: string | null; // e.g., "Knee", "Ankle"
+  injury_start_date: string | null;
+  injury_notes: string | null; // e.g., "Expected to miss 2-3 weeks"
+  status: string; // "Active", "Inactive"
+}
+
 /**
  * API Response wrapper
  */
@@ -240,6 +251,8 @@ export interface TeamRoster {
  */
 export interface PlayerZScore {
   name: string;              // Resolved player name
+  confidence: 'HIGH' | 'MEDIUM' | 'LOW_SAMPLE'; // Data confidence based on games played
+  gp: number;                // Games played
   scores: {                  // Breakdown of Z-scores per category
     [category: string]: number; 
   };

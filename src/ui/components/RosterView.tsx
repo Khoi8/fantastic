@@ -2,8 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { getCachedPlayersNBA } from '../../utils/playerCache';
 import { getCachedNBAStats } from '../../utils/statsCache';
 import { calculateZScores } from '../../utils/zScoreCalculator';
-import { recommendTrades } from '../../utils/tradeRecommender';
-import { calculateConsistency, getRiskColor, formatConsistency } from '../../utils/consistencyRating';
+import { getCachedPlayerInjuries, getPlayerInjuryDetails } from '../../utils/injuryCache';
+import { getCachedRecentStats } from '../../utils/recentStatsCache';
+import { calculateTrends, getTrendColor, getTrendEmoji, formatTrendStatus } from '../../utils/trendAnalysis';
 
 // Map stat abbreviations to full English names
 const STAT_NAMES: { [key: string]: string } = {
@@ -39,11 +40,9 @@ const RosterView: React.FC<RosterViewProps> = ({ roster, allRosters, scoringSett
   const [players, setPlayers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [playerZScores, setPlayerZScores] = useState<{ [playerId: string]: any }>({});
-  const [playerConsistency, setPlayerConsistency] = useState<{ [playerId: string]: any }>({});
   const [expandedPlayerId, setExpandedPlayerId] = useState<string | null>(null);
-  const [selectedNeedCategory, setSelectedNeedCategory] = useState<string | null>(null);
-  const [selectedSpareCategory, setSelectedSpareCategory] = useState<string | null>(null);
-  const [tradeRecommendations, setTradeRecommendations] = useState<any[]>([]);
+  const [playerInjuries, setPlayerInjuries] = useState<{ [playerId: string]: any }>({});
+  const [playerTrends, setPlayerTrends] = useState<{ [playerId: string]: any }>({});
 
   useEffect(() => {
     const loadPlayers = async () => {
@@ -99,16 +98,42 @@ const RosterView: React.FC<RosterViewProps> = ({ roster, allRosters, scoringSett
               
               setPlayerZScores(zScores);
 
-              // Calculate consistency rating for each player based on their stats
-              const consistency: { [playerId: string]: any } = {};
-              Object.entries(zScores).forEach(([playerId, playerData]) => {
-                const statData = stats[playerId];
-                if (statData) {
-                  const playerConsistency = calculateConsistency(statData);
-                  consistency[playerId] = playerConsistency;
+              // Fetch player injury data
+              const injuriesData = await getCachedPlayerInjuries();
+              if (injuriesData) {
+                const injuryMap: { [playerId: string]: any } = {};
+                Object.entries(injuriesData).forEach(([playerId, playerData]: [string, any]) => {
+                  const injuryDetails = getPlayerInjuryDetails(playerData);
+                  if (injuryDetails) {
+                    injuryMap[playerId] = injuryDetails;
+                  }
+                });
+                setPlayerInjuries(injuryMap);
+              }
+
+              // Fetch recent stats and calculate trends
+              try {
+                const recentStats = await getCachedRecentStats();
+                console.log('Cached Recent Stats:', recentStats);
+                if (recentStats) {
+                  const recentZScores = calculateZScores(allRosters, recentStats, scoringSettings);
+                  console.log('Recent Z-Scores:', recentZScores);
+
+                  // Calculate trends comparing season to recent
+                  const trends = calculateTrends(zScores, recentZScores, stats, recentStats);
+                  console.log('Calculated Trends:', trends);
+
+                  // Build trend map for quick lookup
+                  const trendMap: { [playerId: string]: any } = {};
+                  trends.trends.forEach((trend) => {
+                    trendMap[trend.playerId] = trend;
+                  });
+                  setPlayerTrends(trendMap);
                 }
-              });
-              setPlayerConsistency(consistency);
+              } catch (trendError) {
+                console.warn('Error calculating trends:', trendError);
+                // Trends are optional, don't fail if they don't load
+              }
             }
           } catch (error) {
             // Silently fail
@@ -155,6 +180,22 @@ const RosterView: React.FC<RosterViewProps> = ({ roster, allRosters, scoringSett
     const zScore = playerZScores[playerId]?.totalZ ?? 'N/A';
     const bgColor = getRowColor(playerId);
     const isExpanded = expandedPlayerId === playerId;
+    const confidence = playerZScores[playerId]?.confidence;
+    const gp = playerZScores[playerId]?.gp;
+
+    // Color for confidence badge
+    const getConfidenceColor = (conf: string) => {
+      switch (conf) {
+        case 'HIGH':
+          return '#4caf50'; // Green
+        case 'MEDIUM':
+          return '#ff9800'; // Orange
+        case 'LOW_SAMPLE':
+          return '#f44336'; // Red
+        default:
+          return '#999999';
+      }
+    };
 
     return (
       <div key={playerId}>
@@ -175,45 +216,71 @@ const RosterView: React.FC<RosterViewProps> = ({ roster, allRosters, scoringSett
           onMouseEnter={(e) => (e.currentTarget.style.opacity = '0.8')}
           onMouseLeave={(e) => (e.currentTarget.style.opacity = '1')}
         >
-          <div style={{ flex: 1 }}>
-            <div>{player?.name || playerId}</div>
-            <div style={{ fontSize: 10, color: '#999' }}>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <span>{player?.name || playerId}</span>
+              {playerInjuries[playerId] && (
+                <div
+                  style={{
+                    padding: '2px 6px',
+                    background: '#f44336',
+                    color: 'white',
+                    borderRadius: 3,
+                    fontSize: 8,
+                    fontWeight: 600,
+                  }}
+                  title={playerInjuries[playerId].details}
+                >
+                  {playerInjuries[playerId].status}
+                </div>
+              )}
+              {playerTrends[playerId] && (
+                <div
+                  style={{
+                    padding: '2px 6px',
+                    background: getTrendColor(playerTrends[playerId].status),
+                    color: 'white',
+                    borderRadius: 3,
+                    fontSize: 8,
+                    fontWeight: 600,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 2,
+                  }}
+                  title={playerTrends[playerId].reasoning}
+                >
+                  {getTrendEmoji(playerTrends[playerId].status)} {formatTrendStatus(playerTrends[playerId].status)}
+                </div>
+              )}
+            </div>
+            <div style={{ fontSize: 10, color: '#999', marginTop: 2 }}>
               {player?.position} ({player?.team})
             </div>
           </div>
-          <div style={{ minWidth: 50, textAlign: 'right', fontWeight: 600, fontSize: 12 }}>
-            {typeof zScore === 'number' ? zScore.toFixed(2) : zScore}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            {confidence && (
+              <div
+                style={{
+                  padding: '2px 6px',
+                  background: getConfidenceColor(confidence),
+                  color: 'white',
+                  borderRadius: 3,
+                  fontSize: 9,
+                  fontWeight: 600,
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {confidence === 'LOW_SAMPLE' ? `${gp}GP` : confidence === 'MEDIUM' ? `${gp}GP` : `${gp}GP`}
+              </div>
+            )}
+            <div style={{ minWidth: 50, textAlign: 'right', fontWeight: 600, fontSize: 12 }}>
+              {typeof zScore === 'number' ? zScore.toFixed(2) : zScore}
+            </div>
           </div>
         </div>
 
         {isExpanded && playerZScores[playerId] && (
           <div style={{ marginTop: 4, padding: '8px', background: '#f9f9f9', borderRadius: 4, fontSize: 10 }}>
-            {/* Consistency Rating */}
-            {playerConsistency[playerId] && playerConsistency[playerId].riskLevel !== 'N/A' && (
-              <div style={{ marginBottom: 8, padding: 6, background: '#f5f5f5', borderRadius: 3, border: `2px solid ${getRiskColor(playerConsistency[playerId].riskLevel)}` }}>
-                <div style={{ fontWeight: 600, marginBottom: 4, color: '#333' }}>
-                  Consistency Rating
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 4, fontSize: 9 }}>
-                  <div>
-                    <span style={{ fontWeight: 500 }}>Risk Level:</span>{' '}
-                    <span style={{ color: getRiskColor(playerConsistency[playerId].riskLevel), fontWeight: 600 }}>
-                      {playerConsistency[playerId].riskLevel}
-                    </span>
-                  </div>
-                  <div>
-                    <span style={{ fontWeight: 500 }}>CV:</span>{' '}
-                    <span style={{ color: getRiskColor(playerConsistency[playerId].riskLevel), fontWeight: 600 }}>
-                      {playerConsistency[playerId].cv.toFixed(3)}
-                    </span>
-                  </div>
-                  <div style={{ gridColumn: '1 / -1' }}>
-                    <span style={{ fontWeight: 500 }}>Profile:</span> {formatConsistency(playerConsistency[playerId].cv)}
-                  </div>
-                </div>
-              </div>
-            )}
-
             <div style={{ fontWeight: 600, marginBottom: 6, color: '#333' }}>Category Z-Scores:</div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 4, marginBottom: 8 }}>
               {Object.entries(playerZScores[playerId].scores).map(([cat, score]: [string, any]) => {
@@ -221,44 +288,61 @@ const RosterView: React.FC<RosterViewProps> = ({ roster, allRosters, scoringSett
                 const catColor = getCategoryColor(scoreNum);
                 const catName = STAT_NAMES[cat] || cat; // Use full name, fallback to abbreviation
                 const scoreColor = scoreNum > 0 ? '#4caf50' : scoreNum < 0 ? '#f44336' : '#999999'; // Green for positive, red for negative, gray for zero
-                const isSelected = selectedNeedCategory === cat;
-                const isSpareSelected = selectedSpareCategory === cat;
                 return (
-                  <div
-                    key={cat}
-                    onClick={() => {
-                      if (selectedNeedCategory && selectedNeedCategory !== cat) {
-                        // If we already have a need category, clicking another sets it as spare
-                        setSelectedSpareCategory(cat);
-                      } else if (!selectedNeedCategory) {
-                        // First click - set as need category
-                        setSelectedNeedCategory(cat);
-                        setSelectedSpareCategory(null);
-                      } else {
-                        // Deselect
-                        setSelectedNeedCategory(null);
-                        setSelectedSpareCategory(null);
-                      }
-                    }}
-                    style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      padding: '4px 4px',
-                      cursor: 'pointer',
-                      background: isSelected ? '#e3f2fd' : isSpareSelected ? '#fff3cd' : 'transparent',
-                      borderRadius: 3,
-                      border: isSelected ? '1px solid #2196F3' : isSpareSelected ? '1px solid #ff9800' : 'none',
-                    }}
-                  >
+                  <div key={cat} style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 4px' }}>
                     <span style={{ fontWeight: 500 }}>{catName}:</span>
                     <span style={{ color: scoreColor, fontWeight: 600 }}>{scoreNum.toFixed(2)}</span>
                   </div>
                 );
               })}
             </div>
-            {selectedNeedCategory && (
-              <div style={{ padding: '4px', background: '#fff3cd', borderRadius: 3, fontSize: 9, color: '#856404' }}>
-                {selectedSpareCategory ? '✓ Categories selected' : 'Click a category in another player to set as spare'}
+
+            {playerTrends[playerId] && (
+              <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid #ddd' }}>
+                <div style={{ fontWeight: 600, marginBottom: 4, color: '#333' }}>Trend Analysis:</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
+                  <span style={{ fontWeight: 500 }}>Status:</span>
+                  <span
+                    style={{
+                      padding: '2px 6px',
+                      background: getTrendColor(playerTrends[playerId].status),
+                      color: 'white',
+                      borderRadius: 3,
+                      fontSize: 9,
+                      fontWeight: 600,
+                    }}
+                  >
+                    {getTrendEmoji(playerTrends[playerId].status)} {formatTrendStatus(playerTrends[playerId].status)}
+                  </span>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4, marginBottom: 4 }}>
+                  <div>
+                    <span style={{ fontWeight: 500, fontSize: 9 }}>Season Z:</span>
+                    <div style={{ color: '#2196F3', fontWeight: 600 }}>{playerTrends[playerId].seasonZ.toFixed(2)}</div>
+                  </div>
+                  <div>
+                    <span style={{ fontWeight: 500, fontSize: 9 }}>Recent Z:</span>
+                    <div style={{ color: '#ff9800', fontWeight: 600 }}>{playerTrends[playerId].recentZ.toFixed(2)}</div>
+                  </div>
+                </div>
+                <div style={{ marginBottom: 4 }}>
+                  <span style={{ fontWeight: 500, fontSize: 9 }}>Z-Difference:</span>
+                  <div
+                    style={{
+                      color: playerTrends[playerId].zDifference > 0 ? '#4caf50' : '#f44336',
+                      fontWeight: 600,
+                    }}
+                  >
+                    {playerTrends[playerId].zDifference > 0 ? '+' : ''}{playerTrends[playerId].zDifference.toFixed(2)}
+                  </div>
+                </div>
+                <div style={{ marginBottom: 4 }}>
+                  <span style={{ fontWeight: 500, fontSize: 9 }}>Confidence:</span>
+                  <div style={{ color: '#666', fontWeight: 600 }}>{playerTrends[playerId].confidenceScore.toFixed(0)}/100</div>
+                </div>
+                <div style={{ fontSize: 9, color: '#666', lineHeight: 1.4 }}>
+                  <span style={{ fontWeight: 500 }}>Reasoning:</span> {playerTrends[playerId].reasoning}
+                </div>
               </div>
             )}
           </div>
@@ -362,113 +446,6 @@ const RosterView: React.FC<RosterViewProps> = ({ roster, allRosters, scoringSett
             })}
           </div>
         </>
-      )}
-
-      {/* Trade Recommendations Panel */}
-      {selectedNeedCategory && selectedSpareCategory && (
-        <div style={{ marginTop: 16, padding: 12, background: '#f0f7ff', borderRadius: 6, border: '2px solid #2196F3' }}>
-          <div style={{ fontWeight: 700, marginBottom: 8, fontSize: 12, color: '#1976D2' }}>
-            Trade Recommendations
-          </div>
-          <div style={{ fontSize: 10, marginBottom: 8, color: '#555' }}>
-            Looking for players strong in <strong>{STAT_NAMES[selectedNeedCategory] || selectedNeedCategory}</strong>, offering{' '}
-            <strong>{STAT_NAMES[selectedSpareCategory] || selectedSpareCategory}</strong>
-          </div>
-          {(() => {
-            if (!allRosters) return null;
-            const suggestions = recommendTrades(
-              roster.roster_id,
-              allRosters,
-              playerZScores,
-              selectedNeedCategory,
-              selectedSpareCategory,
-              allRosters.reduce((acc: any, r: any) => {
-                acc[String(r.roster_id)] = r.ownerDisplay || `Team ${r.roster_id}`;
-                return acc;
-              }, {})
-            );
-            return (
-              <div style={{ maxHeight: 300, overflowY: 'auto' }}>
-                {suggestions.length === 0 ? (
-                  <div style={{ color: '#999', fontSize: 10 }}>No suggestions available</div>
-                ) : (
-                  suggestions.slice(0, 10).map((suggestion: any, idx: number) => (
-                    <div
-                      key={idx}
-                      style={{
-                        padding: 6,
-                        marginBottom: 4,
-                        background: 'white',
-                        borderRadius: 4,
-                        border: '1px solid #e0e0e0',
-                        fontSize: 10,
-                      }}
-                    >
-                      <div style={{ fontWeight: 600, color: '#333' }}>{suggestion.playerName}</div>
-                      <div style={{ fontSize: 9, color: '#999', marginBottom: 4 }}>{suggestion.ownerName}</div>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4, marginBottom: 4 }}>
-                        <div>
-                          <span style={{ fontWeight: 500 }}>{STAT_NAMES[selectedNeedCategory] || selectedNeedCategory}:</span>{' '}
-                          <span
-                            style={{
-                              color:
-                                suggestion.stats.needCategoryZ > 0
-                                  ? '#4caf50'
-                                  : suggestion.stats.needCategoryZ < 0
-                                    ? '#f44336'
-                                    : '#999999',
-                              fontWeight: 600,
-                            }}
-                          >
-                            {suggestion.stats.needCategoryZ.toFixed(2)}
-                          </span>
-                        </div>
-                        <div>
-                          <span style={{ fontWeight: 500 }}>{STAT_NAMES[selectedSpareCategory] || selectedSpareCategory}:</span>{' '}
-                          <span
-                            style={{
-                              color:
-                                suggestion.stats.spareCategoryZ > 0
-                                  ? '#4caf50'
-                                  : suggestion.stats.spareCategoryZ < 0
-                                    ? '#f44336'
-                                    : '#999999',
-                              fontWeight: 600,
-                            }}
-                          >
-                            {suggestion.stats.spareCategoryZ.toFixed(2)}
-                          </span>
-                        </div>
-                      </div>
-                      <div style={{ padding: 4, background: '#e8f5e9', borderRadius: 3, fontSize: 9, color: '#2e7d32', fontWeight: 600 }}>
-                        Trade Score: {suggestion.stats.tradeScore.toFixed(2)}
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            );
-          })()}
-          <div
-            onClick={() => {
-              setSelectedNeedCategory(null);
-              setSelectedSpareCategory(null);
-            }}
-            style={{
-              marginTop: 8,
-              padding: 4,
-              background: '#ffebee',
-              borderRadius: 3,
-              textAlign: 'center',
-              cursor: 'pointer',
-              fontSize: 10,
-              color: '#c9302c',
-              fontWeight: 600,
-            }}
-          >
-            Clear
-          </div>
-        </div>
       )}
     </div>
   );
