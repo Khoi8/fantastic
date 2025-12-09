@@ -37,3 +37,10 @@ export const getLeagueUsers = (leagueId: string) => {
 export const getPlayersNBA = () => {
     return sleeperClient.get(`/players/nba`);
 }
+
+// Get NBA stats for a season
+// Example: GET https://api.sleeper.app/v1/stats/nba/regular/2025
+export const getNBAStats = (season = '2025', seasonType = 'regular') => {
+    return sleeperClient.get(`/stats/nba/${seasonType}/${season}`);
+}
+

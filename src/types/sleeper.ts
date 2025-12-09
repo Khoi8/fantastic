@@ -188,3 +188,67 @@ export interface ApiResponse<T = any> {
   data: T;
   status?: number;
 }
+
+// --- RAW DATA TYPES ---
+
+/**
+ * Represents the raw stats object for a single player returned by the API.
+ * Includes explicit fields for "Impact" calculations and a catch-all for others.
+ */
+export interface PlayerStats {
+  // Core Info
+  gp: number;                // Games Played
+  player_name?: string;      // Sleeper often puts name here
+  first_name?: string;       // Yahoo/Others might split it
+  last_name?: string;
+  
+  // Stats required for Impact Calculations
+  fgm?: number;              // Field Goals Made
+  fga?: number;              // Field Goals Attempted
+  ftm?: number;              // Free Throws Made
+  fta?: number;              // Free Throws Attempted
+  fg3m?: number;             // 3PT Made
+  fg3a?: number;             // 3PT Attempted
+  
+  // Dynamic access for other stats (pts, reb, ast, etc.)
+  [key: string]: string | number | undefined; 
+}
+
+/**
+ * A dictionary mapping Player IDs to their stats object.
+ * Key: Player ID (string)
+ * Value: PlayerStats object
+ */
+export interface AllStats {
+  [playerId: string]: PlayerStats;
+}
+
+/**
+ * Represents a single team's roster in the league (calculated/derived data).
+ */
+export interface TeamRoster {
+  roster_id?: number;        // Optional: specific to your app
+  owner_id?: string;         // Optional: specific to your app
+  players: string[];         // Array of Player IDs on this team
+}
+
+
+// --- CALCULATED RESULT TYPES ---
+
+/**
+ * The calculated Z-Score data for a single player.
+ */
+export interface PlayerZScore {
+  name: string;              // Resolved player name
+  scores: {                  // Breakdown of Z-scores per category
+    [category: string]: number; 
+  };
+  totalZ: number;            // Sum of all weighted Z-scores
+}
+
+/**
+ * The final output object mapping Player IDs to their Z-Score data.
+ */
+export interface PlayerZScores {
+  [playerId: string]: PlayerZScore;
+}

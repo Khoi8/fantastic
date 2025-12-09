@@ -13,9 +13,7 @@ function HomePage() {
 
     useEffect(() => {
         const id = getCookie('userId');
-        console.log('Retrieved userId from cookie:', id);
         if (id !== null) {
-            console.log('Fetching user data for userId:', id);
             setLoading(true);
             getUserDataWithUserId(id)
                 .then((response) => setUserData(response.data))

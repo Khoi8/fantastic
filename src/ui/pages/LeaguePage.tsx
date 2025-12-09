@@ -9,7 +9,6 @@ const LeaguePage: React.FC = () => {
   const [rosters, setRosters] = useState<any[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [expandedRosterId, setExpandedRosterId] = useState<number | null>(null);
 
   useEffect(() => {
     if (!leagueId) return;
@@ -17,6 +16,10 @@ const LeaguePage: React.FC = () => {
     // Fetch league, rosters and users in parallel
     Promise.all([getLeagueById(leagueId), getLeagueRosters(leagueId), getLeagueUsers(leagueId)])
       .then(([leagueRes, rostersRes, usersRes]) => {
+        console.log('League Data:', leagueRes.data);
+        console.log('Rosters Data:', rostersRes.data);
+        console.log('Users Data:', usersRes.data);
+        console.log('Scoring Settings:', leagueRes.data?.scoring_settings);
         setLeague(leagueRes.data);
         const rostersData = rostersRes.data ?? null;
         const usersData = usersRes.data ?? [];
@@ -55,30 +58,17 @@ const LeaguePage: React.FC = () => {
 
   return (
     <div>
-      <h1>League {leagueId}</h1>
-      {league ? <pre>{JSON.stringify(league, null, 2)}</pre> : <div>No data</div>}
+      <h1>{league?.name ?? `League ${leagueId}`}</h1>
       <h2>Rosters</h2>
       {rosters ? (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(280px,1fr))", gap: 12 }}>
+        <div style={{ display: "flex", flexDirection: "row", gap: 16, flexWrap: "wrap" }}>
           {rosters.map((r) => (
-            <div
-              key={r.roster_id}
-              onClick={() => setExpandedRosterId(expandedRosterId === r.roster_id ? null : r.roster_id)}
-              style={{
-                border: "1px solid #ddd",
-                padding: 12,
-                borderRadius: 6,
-                cursor: "pointer",
-                background: expandedRosterId === r.roster_id ? "#f9f9f9" : "white",
-                transition: "background 0.2s",
-              }}
-            >
-              <div style={{ fontWeight: 600, marginBottom: 4 }}>{r.name ?? `Roster ${r.roster_id}`}</div>
-              <div style={{ fontSize: 12, color: "#555", marginBottom: 2 }}>Owner: {r.ownerDisplay}</div>
-              <div style={{ fontSize: 12, color: "#555", marginBottom: 8 }}>
-                Players: {(r.players && r.players.length) ?? 0}
+            <div key={r.roster_id} style={{ border: "1px solid #ddd", padding: 12, borderRadius: 6, minWidth: 320 }}>
+              <div style={{ fontWeight: 600, marginBottom: 8, fontSize: 14 }}>
+                {r.name ?? `Roster ${r.roster_id}`}
               </div>
-              {expandedRosterId === r.roster_id && <RosterView roster={r} />}
+              <div style={{ fontSize: 12, color: "#666", marginBottom: 12 }}>Owner: {r.ownerDisplay}</div>
+              <RosterView roster={r} allRosters={rosters} scoringSettings={league.scoring_settings} />
             </div>
           ))}
         </div>
